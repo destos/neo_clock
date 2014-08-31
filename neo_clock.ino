@@ -1,13 +1,18 @@
+#include <Tween.h>
 #include <Wire.h>
 #include <RTClib.h>
-#include <Time.h>
+#include <vcnl4000.h>
 #include <Adafruit_NeoPixel.h>
 
 // define pins
 #define NEOPIN 4
 #define PIXELS 60
 
-#define BRIGHTNESS 100 // set max brightness
+#define MIN_BRIGHTNESS 100 // set max brightness
+uint8_t target_brightness = MIN_BRIGHTNESS;
+uint8_t current_brightness = target_brightness;
+
+Tween_t brightness_chase;
 
 RTC_DS1307 RTC; // Establish clock object
 DateTime Clock; // Holds current clock time
@@ -33,27 +38,14 @@ DateTime Clock; // Holds current clock time
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXELS, NEOPIN, NEO_GRB + NEO_KHZ800); // strip object
 
-uint32_t second_color = strip.Color( 44,  30,  0); //slightly yellower
+vcnl4000 sensor = vcnl4000();
+
+// Color scheme
+uint32_t second_color = strip.Color( 84,  30,  0); //slightly yellower
 uint32_t hour_color   = strip.Color( 44,  42,  0); //yellow
-uint32_t minute_color = strip.Color( 43,   0,  5); //red
+uint32_t minute_color = strip.Color(  0,   0,  90); //red
 uint32_t off_color    = strip.Color(  0,   0,  4);
 
-// #define MIDPOINTBRIGHTNESS 140 //trial and error to get midpoint looking just right
-
-// int subpixel(int subTicks, int numberOfSubTicks, int* firstBright, int* lastBright){
-int subpixel(int subTicks, int numberOfSubTicks){
-    int sqrTm;
-    int halfTicks = numberOfSubTicks>>1;
-    int halfSquared = sq(halfTicks);
-    // sqrTm  = (halfSquared-sq(subTicks-halfTicks)); //create large parabolic gamma term
-    // sqrTm *= (MIDPOINTBRIGHTNESS-127); //multiply before dividing, to get good resolution. can be negative now.
-    sqrTm += halfSquared>>1; //make it round to the nearest value instead of always truncating down
-    sqrTm /= halfSquared; //normalize back to required value
-
-    return (255*subTicks)/numberOfSubTicks + sqrTm;
-    // *lastBright = (255*subTicks)/numberOfSubTicks + sqrTm;
-    // *firstBright = (255*(numberOfSubTicks-subTicks))/numberOfSubTicks + sqrTm;
-}
 
 class ClockPositions
 {
@@ -83,12 +75,16 @@ void ClockPositions::setup(){
 void ClockPositions::update(){
 
     Clock = RTC.now(); // get the RTC time
-    setTime(Clock.hour(), Clock.minute(), Clock.second(), Clock.day(), Clock.month(), Clock.year());
+    // setTime(Clock.hour(), Clock.minute(), Clock.second(), Clock.day(), Clock.month(), Clock.year());
     // adjustTime(offset * SECS_PER_HOUR);
 
-    currentsecond = second();
-    currenthour   = hour() % 12;
-    currentminute = map(minute() % 60, 0,  60, 0, 59);
+    // currentsecond = second();
+    // currenthour   = hour() % 12;
+    // currentminute = map(minute() % 60, 0, 60, 0, 59);
+    currentsecond = Clock.second();
+    currenthour   = Clock.hour() % 12;
+    currentminute = map(Clock.minute() % 60, 0, 60, 0, 59);
+    // currentminute = minute();
 }
 
 /* CLOCK VIEW */
@@ -103,7 +99,7 @@ class ClockSegments
         void draw ();
         void clear();
         void add_color(uint8_t position, uint32_t color, uint8_t pct=127);
-        uint32_t adjust_brightness(uint32_t color, uint8_t brightness);
+        // uint32_t adjust_brightness(uint32_t color, uint8_t brightness);
         uint32_t blend(uint32_t color1, uint32_t color2, uint8_t pct=127);
 };
 
@@ -114,9 +110,10 @@ ClockSegments::ClockSegments(Adafruit_NeoPixel& n_strip, ClockPositions& n_posit
 void ClockSegments::draw(){
     clear();
     // minute arm slowly moves
-    uint8_t adjust_by = subpixel(positions.currentsecond, 60);
-    add_color(positions.currentminute, adjust_brightness(minute_color, ~adjust_by));
-    add_color(positions.currentminute+1, adjust_brightness(minute_color, adjust_by));
+    uint8_t adjust_by = map(positions.currentsecond, 0, 59, 0, 255);
+    add_color(positions.currentminute, minute_color, adjust_by);
+    int next_min_pos = (positions.currentminute < 59) ? positions.currentminute + 1 : 0;
+    add_color(next_min_pos, minute_color, ~adjust_by);
 
     // Hour segment takes up entire hour span
     int hour_segment = strip.numPixels()/12;
@@ -135,15 +132,15 @@ void ClockSegments::add_color(uint8_t position, uint32_t color, uint8_t pct){
     strip.setPixelColor(position, blended_color);
 }
 
-uint32_t ClockSegments::adjust_brightness(uint32_t color, uint8_t brightness){
-    uint8_t r,b,g;
+// uint32_t ClockSegments::adjust_brightness(uint32_t color, uint8_t brightness){
+//     uint8_t r,b,g;
 
-    r = ((uint8_t)(color >> 16) * brightness) >> 8,
-    g = ((uint8_t)(color >>  8) * brightness) >> 8,
-    b = ((uint8_t)(color >>  0) * brightness) >> 8;
+//     r = ((uint8_t)(color >> 16) * brightness) >> 8,
+//     g = ((uint8_t)(color >>  8) * brightness) >> 8,
+//     b = ((uint8_t)(color >>  0) * brightness) >> 8;
 
-    return strip.Color(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
-}
+//     return strip.Color(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
+// }
 
 uint32_t ClockSegments::blend(uint32_t color1, uint32_t color2, uint8_t pct){
     uint8_t r1,g1,b1;
@@ -157,10 +154,33 @@ uint32_t ClockSegments::blend(uint32_t color1, uint32_t color2, uint8_t pct){
     r2 = (uint8_t)(color2 >> 16),
     g2 = (uint8_t)(color2 >>  8),
     b2 = (uint8_t)(color2 >>  0);
-    
-    r3 = (uint8_t)(constrain((uint16_t)r1*pct+(uint16_t)r2*(~pct), 0, 65025)/255);
-    g3 = (uint8_t)(constrain((uint16_t)g1*pct+(uint16_t)g2*(~pct), 0, 65025)/255);
-    b3 = (uint8_t)(constrain((uint16_t)b1*pct+(uint16_t)b2*(~pct), 0, 65025)/255);
+
+    // Serial.println("----");
+    // Serial.println(pct);
+    // Serial.print(" r1");
+    // Serial.print(r1);
+    // Serial.print(" g1");
+    // Serial.print(g1);
+    // Serial.print(" b1");
+    // Serial.println(b1);
+
+    // Serial.print(" r2:");
+    // Serial.print(r2);
+    // Serial.print(" g2:");
+    // Serial.print(g2);
+    // Serial.print(" b2:");
+    // Serial.println(b2);
+
+    r3 = (uint8_t)(((uint16_t)r1*pct + (uint16_t)r2*(255-pct))/255);
+    g3 = (uint8_t)(((uint16_t)g1*pct + (uint16_t)g2*(255-pct))/255);
+    b3 = (uint8_t)(((uint16_t)b1*pct + (uint16_t)b2*(255-pct))/255);
+
+    // Serial.print(" r3:");
+    // Serial.print(r3);
+    // Serial.print(" g3:");
+    // Serial.print(g3);
+    // Serial.print(" b3:");
+    // Serial.println(b3);
 
     return strip.Color(r3, g3, b3);
 }
@@ -175,20 +195,52 @@ void ClockSegments::clear()
 ClockPositions positions;
 ClockSegments segments(strip, positions);
 
+long brightness_start_ms;
+
+void ambient_adjustments() {
+    int ambient = sensor.readAmbient();
+    Serial.println(ambient);
+    // When bright in the room raise the brightness,
+    target_brightness = constrain(map(ambient, 40, 250, MIN_BRIGHTNESS, 255), MIN_BRIGHTNESS, 255);
+
+    brightness_start_ms = millis();
+    // adjust over second
+    Tween_line(&brightness_chase, (float) target_brightness, (float) 1000);
+}
+
 void setup () {
     Serial.begin(9600);
 
     Wire.begin();  // Begin I2C
     RTC.begin();   // begin clock
     positions.setup(); // get clock time
+    sensor.setup();
 
     strip.begin();
     strip.show(); // Initialize all pixels to 'off'
-    strip.setBrightness(BRIGHTNESS); // set overall brightness
+    strip.setBrightness(MIN_BRIGHTNESS); // set overall brightness
 }
 
+// used to fire intermitent functions
+long previous_time = 0;
+long interval = 1000;
+
 void loop () {
-    positions.update();
+
+    long current_ms = millis();
+
+    if(current_ms - previous_time > interval) {
+        positions.update();
+
+        previous_time = current_ms;
+        ambient_adjustments();
+    }
+
+    // change brightness with tween
+    current_brightness = (int) Tween_tick(&brightness_chase, (current_ms - brightness_start_ms));
+    // Serial.println(current_brightness);
+
     segments.draw();
-    delay(1000);
+    strip.setBrightness(current_brightness);
+    delay(20);
 }
