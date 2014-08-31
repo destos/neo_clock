@@ -102,9 +102,9 @@ class ClockSegments
         ClockSegments(Adafruit_NeoPixel&, ClockPositions&);
         void draw ();
         void clear();
-        void add_color(uint8_t position, uint32_t color);
+        void add_color(uint8_t position, uint32_t color, uint8_t pct=127);
         uint32_t adjust_brightness(uint32_t color, uint8_t brightness);
-        uint32_t blend(uint32_t color1, uint32_t color2);
+        uint32_t blend(uint32_t color1, uint32_t color2, uint8_t pct=127);
 };
 
 
@@ -129,15 +129,8 @@ void ClockSegments::draw(){
 }
 
 
-void ClockSegments::add_color(uint8_t position, uint32_t color){
-    uint32_t blended_color = blend(strip.getPixelColor(position), color);
-
-    /* Gamma mapping */
-    uint8_t r,b,g;
-
-    r = (uint8_t)(blended_color >> 16),
-    g = (uint8_t)(blended_color >>  8),
-    b = (uint8_t)(blended_color >>  0);
+void ClockSegments::add_color(uint8_t position, uint32_t color, uint8_t pct){
+    uint32_t blended_color = blend(strip.getPixelColor(position), color, pct);
 
     strip.setPixelColor(position, blended_color);
 }
@@ -152,7 +145,7 @@ uint32_t ClockSegments::adjust_brightness(uint32_t color, uint8_t brightness){
     return strip.Color(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
 }
 
-uint32_t ClockSegments::blend(uint32_t color1, uint32_t color2){
+uint32_t ClockSegments::blend(uint32_t color1, uint32_t color2, uint8_t pct){
     uint8_t r1,g1,b1;
     uint8_t r2,g2,b2;
     uint8_t r3,g3,b3;
@@ -164,8 +157,12 @@ uint32_t ClockSegments::blend(uint32_t color1, uint32_t color2){
     r2 = (uint8_t)(color2 >> 16),
     g2 = (uint8_t)(color2 >>  8),
     b2 = (uint8_t)(color2 >>  0);
+    
+    r3 = (uint8_t)(constrain((uint16_t)r1*pct+(uint16_t)r2*(~pct), 0, 65025)/255);
+    g3 = (uint8_t)(constrain((uint16_t)g1*pct+(uint16_t)g2*(~pct), 0, 65025)/255);
+    b3 = (uint8_t)(constrain((uint16_t)b1*pct+(uint16_t)b2*(~pct), 0, 65025)/255);
 
-    return strip.Color(constrain(r1+r2, 0, 255), constrain(g1+g2, 0, 255), constrain(b1+b2, 0, 255));
+    return strip.Color(r3, g3, b3);
 }
 
 void ClockSegments::clear()
