@@ -11,7 +11,7 @@
 #define PIXELS 60
 
 // Brightness adjust settings and variables
-#define MIN_BRIGHTNESS 60 // set minimum brightness
+#define MIN_BRIGHTNESS 90 // set minimum brightness
 #define MAX_BRIGHTNESS 220// set max brightness
 #define LOW_AMBIENT 40
 #define HIGH_AMBIENT 300
@@ -36,7 +36,7 @@ void ambient_adjustments() {
     int ambient = sensor.readAmbient();
     // When bright in the room raise the brightness,
     target_brightness = constrain(
-        map(ambient, LOW_AMBIENT, HIGH_AMBIENT, MIN_BRIGHTNESS, MAX_BRIGHTNESS), 0, 256);
+        map(ambient, LOW_AMBIENT, HIGH_AMBIENT, MIN_BRIGHTNESS, MAX_BRIGHTNESS), 0, 255);
 
     // Serial.print("ambient:");
     // Serial.println(ambient);
@@ -98,7 +98,8 @@ void loop () {
     // Adjust the brightness!
     if(current_brightness != target_brightness){
         // change brightness with tween
-        current_brightness = Tween_tick(&brightness_chase, (current_ms - brightness_start_ms));
+        long adjust_diff = current_ms - brightness_start_ms;
+        current_brightness = Tween_tick(&brightness_chase, adjust_diff);
         // Serial.print("current b:");
         // Serial.println(current_brightness);
         strip.setBrightness(current_brightness);
