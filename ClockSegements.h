@@ -18,7 +18,7 @@ class ClockSegments
         Adafruit_NeoPixel &strip;
 
         ClockSegments(Adafruit_NeoPixel&, ClockTime&);
-        void draw ();
+        void draw();
         void clear();
         void calculate_colors();
         void add_color(uint8_t position, uint32_t color, uint8_t pct=127);

@@ -20,5 +20,4 @@ void ClockTime::update(){
     currentsecond = Clock.second();
     currenthour   = Clock.hour() % 12;
     currentminute = Clock.minute() % 60;
-
 }

@@ -6,7 +6,7 @@ ClockSegments::ClockSegments(Adafruit_NeoPixel& n_strip, ClockTime& n_time): str
     second_color = strip.Color( 84,  30,  0); // orange
     hour_color   = strip.Color( 44,  42,  0); // yellow
     minute_color = strip.Color(  0,   0, 90); // bright blue
-    off_color    = strip.Color(  0,   0,  4); // light blue
+    off_color    = strip.Color(  0,   10,  4); // light green
 
     // segments[16]
 }
@@ -27,25 +27,50 @@ void ClockSegments::calculate_colors(){
     // clear previous colors before adding our own
     clear();
 
+    int minute = clock_time.currentminute;
+    int second = clock_time.currentsecond;
+    int hour = clock_time.currenthour;
+
     // minute arm slowly moves
-    uint8_t adjust_by = map(clock_time.currentsecond, 0, 59, 0, 255);
-    add_color(clock_time.currentminute, minute_color, adjust_by);
-    int next_min_pos = (clock_time.currentminute < 59) ? clock_time.currentminute + 1 : 0;
+    uint8_t adjust_by = map(second, 0, 59, 0, 255);
+    add_color(minute, minute_color, adjust_by);
+    int next_min_pos = (minute < 59) ? minute + 1 : 0;
     add_color(next_min_pos, minute_color, ~adjust_by);
 
     // Hour segment takes up entire hour span
     int hour_segment = strip.numPixels()/12;
-    for(int i=0; i<hour_segment; i++){
-        add_color(clock_time.currenthour*hour_segment+i, hour_color);
+
+#ifdef DEBUG
+    Serial.print("minute:");
+    Serial.println(minute);
+#endif
+
+    for(int i=0; i<hour_segment+1; i++){
+        // current LED power, moves with minutes
+        int hour_seg_to_seconds = map(i, 0, 5, 1, 60*60);
+        int hour_seg_off = abs(hour_seg_to_seconds - ((minute * 60) + second));
+        int hour_power = map(hour_seg_off, 0, 60*60, 30, 255);
+
+#ifdef DEBUG
+        Serial.print("seg:");
+        Serial.print(hour*hour_segment+i);
+        Serial.print(" seg_to_min:");
+        Serial.print(hour_seg_to_seconds);
+        Serial.print(" seg_off:");
+        Serial.print(hour_seg_off);
+        Serial.print(" power:");
+        Serial.println(hour_power);
+#endif
+        add_color(hour*hour_segment+i, hour_color, hour_power);
     }
 
-    // second arm ticks
-    add_color(clock_time.currentsecond, second_color);
+    // second arm tick
+    add_color(second, second_color);
 }
 
 
 void ClockSegments::add_color(uint8_t position, uint32_t color, uint8_t pct){
-    uint32_t blended_color = blend(strip.getPixelColor(position), color, pct);
+    uint32_t blended_color = blend(segments[position], color, pct);
     segments[position] = blended_color;
 }
 

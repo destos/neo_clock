@@ -10,11 +10,13 @@
 #define NEOPIN 4
 #define PIXELS 60
 
+// #define DEBUG
+
 // Brightness adjust settings and variables
-#define MIN_BRIGHTNESS 90 // set minimum brightness
-#define MAX_BRIGHTNESS 220// set max brightness
+#define MIN_BRIGHTNESS 100 // set minimum brightness
+#define MAX_BRIGHTNESS 255// set max brightness
 #define LOW_AMBIENT 40
-#define HIGH_AMBIENT 300
+#define HIGH_AMBIENT 350
 #define TWEEN_LENGTH 4000 // tween length in ms
 uint8_t target_brightness = MIN_BRIGHTNESS;
 uint8_t current_brightness = target_brightness;
@@ -103,9 +105,12 @@ void loop () {
         // Serial.print("current b:");
         // Serial.println(current_brightness);
         strip.setBrightness(current_brightness);
+        // 25 fps
+        delay(40);
+    }else{
+        // 1 fps
+        delay(1000);
     }
 
     segments.draw();
-    // 25fps
-    delay(40);
 }
